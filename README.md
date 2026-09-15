@@ -116,6 +116,74 @@ Exemplo de corpo para POST e PUT:
 
 Todos os campos são obrigatórios. O ID é gerado pelo banco. Nome e jogo não podem ser vazios e aceitam até 120 e 80 caracteres, respectivamente. A data usa o formato `AAAA-MM-DD`. A premiação aceita valores de zero a 9.999.999.999,99, com até duas casas decimais. O status aceita `aberto`, `em_andamento` ou `encerrado`. A premiação é retornada como string para preservar a precisão decimal.
 
+## CRUD pelo terminal (PowerShell)
+
+Com os serviços em execução, abra outro PowerShell e execute os blocos em ordem, no mesmo terminal. As variáveis são reutilizadas nas operações seguintes. Execute um bloco por vez; se receber HTTP 429, aguarde alguns segundos antes de repetir a requisição.
+
+### Criar — POST
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$base = 'http://localhost:8000'
+$dados = @{
+    nome = 'Campeonato da aula'
+    jogo = 'FS25'
+    data = '2026-09-15'
+    premiacao = 1000
+    status = 'aberto'
+}
+$corpo = [System.Text.Encoding]::UTF8.GetBytes(($dados | ConvertTo-Json))
+$novo = Invoke-RestMethod -Uri "$base/campeonatos" -Method Post -ContentType 'application/json; charset=utf-8' -Body $corpo
+$campeonatoId = $novo.id
+$novo | Format-List
+```
+
+O ID gerado pelo banco fica em `$campeonatoId`. A criação retorna HTTP 201.
+
+### Listar — GET
+
+```powershell
+Invoke-RestMethod -Uri "$base/campeonatos" -Method Get | Format-Table
+```
+
+### Consultar por ID — GET
+
+```powershell
+Invoke-RestMethod -Uri "$base/campeonatos/$campeonatoId" -Method Get | Format-List
+```
+
+Para consultar outro registro, atribua seu ID a `$campeonatoId` antes da requisição.
+
+### Atualizar — PUT
+
+O PUT exige todos os campos editáveis. O objeto `$dados` mantém os campos definidos na criação:
+
+```powershell
+$dados.nome = 'Campeonato atualizado'
+$dados.premiacao = 2000
+$dados.status = 'em_andamento'
+$corpo = [System.Text.Encoding]::UTF8.GetBytes(($dados | ConvertTo-Json))
+Invoke-RestMethod -Uri "$base/campeonatos/$campeonatoId" -Method Put -ContentType 'application/json; charset=utf-8' -Body $corpo | Format-List
+```
+
+Consulte novamente pelo ID para conferir os dados atualizados. A atualização retorna HTTP 200.
+
+### Excluir — DELETE
+
+O comando exclui o registro identificado por `$campeonatoId`:
+
+```powershell
+Invoke-RestMethod -Uri "$base/campeonatos/$campeonatoId" -Method Delete
+```
+
+A exclusão retorna HTTP 204, sem conteúdo no terminal. Liste novamente para conferir:
+
+```powershell
+Invoke-RestMethod -Uri "$base/campeonatos" -Method Get | Format-Table
+```
+
+Uma consulta pelo ID excluído retorna HTTP 404. Para acompanhar os eventos de criação e exclusão, use `docker compose logs -f consumer` em outro terminal na pasta do projeto.
+
 ## Mensageria
 
 - `campeonato_criado`: recebe os dados após a criação de um campeonato.
