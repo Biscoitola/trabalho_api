@@ -41,6 +41,13 @@ docker compose up --build
 - Documentação dos endpoints (Swagger): `http://localhost:8000/docs`
 - Painel do RabbitMQ: `http://localhost:15672`
 
+Endereços das instâncias dentro da rede Docker:
+
+- API 1: `http://api1:8000/campeonatos`
+- API 2: `http://api2:8000/campeonatos`
+
+Os nomes `api1` e `api2` são acessíveis pelos containers na rede do Compose. Esses endereços não abrem diretamente no navegador do computador, pois as portas das instâncias não estão publicadas. No computador, use `http://localhost:8000/campeonatos`: o NGINX encaminha a requisição para uma das instâncias, identificada pelo cabeçalho `X-Instancia` da resposta.
+
 As configurações padrão estão em `docker-compose.yml`. O arquivo `.env.example` contém as variáveis para personalização. O acesso padrão ao RabbitMQ é `estudante` / `estudante123`.
 
 ### Portas
