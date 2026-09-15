@@ -192,6 +192,80 @@ Invoke-RestMethod -Uri "$base/campeonatos" -Method Get | Format-Table
 
 Uma consulta pelo ID excluído retorna HTTP 404. Para acompanhar os eventos de criação e exclusão, use `docker compose logs -f consumer` em outro terminal na pasta do projeto.
 
+## Testar o load balance (PowerShell)
+
+Com os serviços em execução, envie dez consultas ao gateway e observe o cabeçalho `X-Instancia`:
+
+```powershell
+Start-Sleep -Seconds 2
+1..10 | ForEach-Object {
+    $resposta = Invoke-WebRequest -Uri 'http://localhost:8000/campeonatos' -UseBasicParsing -TimeoutSec 10
+    [PSCustomObject]@{
+        Consulta = $_
+        StatusHTTP = [int]$resposta.StatusCode
+        Instancia = $resposta.Headers['X-Instancia']
+    }
+    Start-Sleep -Milliseconds 500
+} | Format-Table Consulta, StatusHTTP, Instancia -AutoSize
+```
+
+O resultado deve incluir respostas de `api1` e `api2`, mostrando a distribuição pelo NGINX. Outras requisições simultâneas podem alterar a ordem observada; não é necessário haver alternância perfeita. A pausa evita que este teste sozinho ultrapasse o rate limit.
+
+Para acompanhar as instâncias nos logs, execute em outro terminal na pasta do projeto:
+
+```powershell
+docker compose logs -f api1 api2
+```
+
+## Testar o rate limit (PowerShell)
+
+O teste abaixo usa `curl.exe` e envia 200 consultas GET: dez processos em paralelo, com vinte requisições por processo. Exibe o status de cada consulta e um resumo das respostas. Não cria campeonatos nem publica eventos no RabbitMQ.
+
+```powershell
+Start-Sleep -Seconds 2
+$jobs = 1..10 | ForEach-Object {
+    Start-Job -ArgumentList $_ -ScriptBlock {
+        param($lote)
+        1..20 | ForEach-Object {
+            $codigo = curl.exe --max-time 10 -s -o NUL -w '%{http_code}' http://localhost:8000/campeonatos
+            [PSCustomObject]@{
+                Consulta = (($lote - 1) * 20) + $_
+                StatusHTTP = $codigo
+            }
+        }
+    }
+}
+
+try {
+    $resultados = $jobs | Wait-Job | Receive-Job
+    $resultados | Sort-Object Consulta | Format-Table Consulta, StatusHTTP -AutoSize
+    $resultados | Group-Object StatusHTTP |
+        Select-Object @{Name='StatusHTTP'; Expression={$_.Name}}, Count |
+        Format-Table -AutoSize
+}
+finally {
+    $jobs | Remove-Job -Force
+}
+```
+
+Os números identificam as consultas, não a ordem de chegada ao servidor.
+
+| Resultado | Significado |
+| --- | --- |
+| `200` | Consulta aceita pela API. |
+| `429` | Requisição bloqueada pelo rate limit do NGINX. |
+| `000` | O curl não recebeu uma resposta HTTP, por exemplo por falha de conexão ou timeout. |
+
+Respostas `429` confirmam que o limite foi acionado. A quantidade depende da velocidade de envio. A configuração permite uma taxa sustentada de 5 requisições por segundo por IP, com tolerância de 5 excedentes (`burst=5 nodelay`). Dez chamadas podem retornar `200` se chegarem suficientemente espaçadas e aproveitarem essa tolerância. Se todas as respostas forem `200`, aumente a quantidade ou a concorrência do teste. Aguarde alguns segundos após a rajada antes de voltar ao CRUD.
+
+Para acompanhar os bloqueios pelo gateway:
+
+```powershell
+docker compose logs -f nginx
+```
+
+A configuração fica em `nginx/nginx.conf`, nas diretivas `limit_req_zone`, `limit_req_status` e `limit_req`.
+
 ## Mensageria
 
 - `campeonato_criado`: recebe os dados após a criação de um campeonato.
