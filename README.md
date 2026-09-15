@@ -4,6 +4,11 @@ Projeto de Desenvolvimento de API com Persistência e Arquitetura Distribuída. 
 
 ## Tecnologias e arquitetura
 
+As duas opções implementadas são:
+
+1. **API Gateway com balanceamento de carga e rate limit**, usando NGINX.
+2. **Mensageria com Producer e Consumer**, usando RabbitMQ.
+
 - Python, FastAPI e SQLAlchemy para a API e o acesso ao banco.
 - PostgreSQL para persistência dos dados.
 - NGINX como API Gateway, com balanceamento entre duas instâncias e limite de requisições.
@@ -18,9 +23,13 @@ Cliente → NGINX → api1 / api2 → PostgreSQL
 
 As duas instâncias compartilham o banco. O NGINX distribui as requisições por round-robin. O cabeçalho `X-Instancia` identifica quem respondeu. O limite é de 5 requisições por segundo por IP, com tolerância de 5 requisições excedentes; acima disso, o gateway retorna HTTP 429.
 
+O banco compartilhado mantém os mesmos dados disponíveis para ambas as instâncias. O gateway centraliza o acesso e distribui a carga. A mensageria permite processar os eventos em um serviço separado da API. O Docker Compose reúne os componentes e suas dependências em uma configuração reproduzível.
+
 ## Execução
 
 Requisito: Docker com Docker Compose e suporte a containers Linux.
+
+No Windows, abra o Docker Desktop e aguarde o mecanismo iniciar antes de executar os comandos no PowerShell.
 
 Na pasta do projeto:
 
@@ -33,6 +42,36 @@ docker compose up --build
 - Painel do RabbitMQ: `http://localhost:15672`
 
 As configurações padrão estão em `docker-compose.yml`. O arquivo `.env.example` contém as variáveis para personalização. O acesso padrão ao RabbitMQ é `estudante` / `estudante123`.
+
+### Portas
+
+| Serviço | Porta no container | Porta no computador |
+| --- | --- | --- |
+| NGINX (acesso à API e ao Swagger) | 80 | 8000 |
+| API (cada instância) | 8000 | Somente rede interna Docker |
+| PostgreSQL | 5432 | Somente rede interna Docker |
+| RabbitMQ (mensagens) | 5672 | Somente rede interna Docker |
+| RabbitMQ (painel) | 15672 | 15672 |
+
+### Variáveis de ambiente
+
+| Variável | Finalidade | Padrão |
+| --- | --- | --- |
+| `POSTGRES_DB` | Nome do banco | `campeonatos` |
+| `POSTGRES_USER` | Usuário do banco | `estudante` |
+| `POSTGRES_PASSWORD` | Senha do banco | `estudante123` |
+| `RABBITMQ_USER` | Usuário do RabbitMQ | `estudante` |
+| `RABBITMQ_PASSWORD` | Senha do RabbitMQ | `estudante123` |
+
+O arquivo `.env` é opcional. Para personalizar os valores, copie `.env.example` para `.env` na raiz do projeto e edite antes da primeira inicialização. No PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+`INSTANCE_NAME` é definido pelo Compose como `api1` ou `api2` para identificar cada instância. As credenciais padrão são destinadas à execução local. Alterar as variáveis do PostgreSQL não altera as credenciais de um volume já inicializado.
+
+### Logs e encerramento
 
 Para acompanhar as mensagens:
 
