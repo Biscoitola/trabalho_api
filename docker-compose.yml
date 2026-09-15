@@ -1,0 +1,90 @@
+name: campeonatos
+
+x-api: &api
+  build: .
+  restart: unless-stopped
+  environment: &ambiente
+    POSTGRES_DB: ${POSTGRES_DB:-campeonatos}
+    POSTGRES_USER: ${POSTGRES_USER:-estudante}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-estudante123}
+    RABBITMQ_USER: ${RABBITMQ_USER:-estudante}
+    RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-estudante123}
+  depends_on:
+    postgres:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+    interval: 10s
+    timeout: 5s
+    retries: 6
+    start_period: 15s
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-campeonatos}
+      POSTGRES_USER: ${POSTGRES_USER:-estudante}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-estudante123}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  rabbitmq:
+    image: rabbitmq:4.1-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-estudante}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-estudante123}
+    ports:
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  api1:
+    <<: *api
+    environment:
+      <<: *ambiente
+      INSTANCE_NAME: api1
+
+  api2:
+    <<: *api
+    environment:
+      <<: *ambiente
+      INSTANCE_NAME: api2
+
+  consumer:
+    build: ./consumer
+    restart: unless-stopped
+    environment:
+      RABBITMQ_USER: ${RABBITMQ_USER:-estudante}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-estudante123}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:1.28-alpine
+    ports:
+      - "127.0.0.1:8000:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      api1:
+        condition: service_healthy
+      api2:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
