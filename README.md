@@ -69,6 +69,7 @@ As configurações padrão estão em `docker-compose.yml`. O arquivo `.env.examp
 | `POSTGRES_PASSWORD` | Senha do banco | `estudante123` |
 | `RABBITMQ_USER` | Usuário do RabbitMQ | `estudante` |
 | `RABBITMQ_PASSWORD` | Senha do RabbitMQ | `estudante123` |
+| `CONSUMER_DELAY_SECONDS` | Atraso por mensagem antes da confirmação do consumer (0 a 30 segundos) | `5` |
 
 O arquivo `.env` é opcional. Para personalizar os valores, copie `.env.example` para `.env` na raiz do projeto e edite antes da primeira inicialização. No PowerShell:
 
@@ -197,5 +198,7 @@ Uma consulta pelo ID excluído retorna HTTP 404. Para acompanhar os eventos de c
 - `campeonato_excluido`: recebe os dados após a exclusão de um campeonato.
 
 O consumer escuta as duas filas, imprime o nome do campeonato e confirma o processamento. As filas são duráveis e as mensagens são persistentes. Consultas e atualizações não publicam eventos.
+
+Por padrão, o consumer aguarda 5 segundos antes de confirmar cada mensagem, simulando um processamento demorado para permitir observar as filas no painel. Durante o atraso, a mensagem entregue fica em `Unacked`; outras podem aguardar em `Ready`. O atraso ocorre no consumer, sem fazer a API esperar pelo consumo. Para desativá-lo, defina `CONSUMER_DELAY_SECONDS=0` no `.env`. Após alterar essa variável, aplique com `docker compose up -d --no-build consumer` (a imagem já deve estar construída).
 
 A gravação no banco e a publicação no RabbitMQ são operações separadas. Se a publicação falhar após a gravação, a operação no banco permanece concluída e a API retorna `X-Evento-Status: falhou`, sem reenvio automático. Quando a publicação é confirmada, retorna `X-Evento-Status: publicado`.

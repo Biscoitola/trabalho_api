@@ -4,6 +4,10 @@ import time
 
 import pika
 
+ATRASO_SEGUNDOS = float(os.getenv("CONSUMER_DELAY_SECONDS", "5"))
+if not 0 <= ATRASO_SEGUNDOS <= 30:
+    raise ValueError("CONSUMER_DELAY_SECONDS deve estar entre 0 e 30 segundos.")
+
 
 def receber(channel, method, properties, body):
     try:
@@ -13,6 +17,10 @@ def receber(channel, method, properties, body):
         print("Mensagem inválida descartada.", flush=True)
         channel.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
         return
+    if ATRASO_SEGUNDOS:
+        print(f"Processando {nome}: aguardando {ATRASO_SEGUNDOS:g}s antes do ACK...", flush=True)
+        # Mantém a conexão com o broker ativa durante o atraso de demonstração.
+        channel.connection.sleep(ATRASO_SEGUNDOS)
     if method.routing_key == "campeonato_criado":
         print(f"[NOVO CAMPEONATO]\nCampeonato criado: {nome}", flush=True)
     else:
@@ -39,7 +47,7 @@ def main():
                 for fila in ("campeonato_criado", "campeonato_excluido"):
                     channel.queue_declare(queue=fila, durable=True)
                     channel.basic_consume(queue=fila, on_message_callback=receber)
-                print("Aguardando mensagens nas duas filas...", flush=True)
+                print(f"Aguardando mensagens nas duas filas. Atraso por mensagem: {ATRASO_SEGUNDOS:g}s.", flush=True)
                 channel.start_consuming()
         except (pika.exceptions.AMQPError, OSError) as erro:
             print(f"RabbitMQ indisponível: {erro}. Nova tentativa em 5s.", flush=True)

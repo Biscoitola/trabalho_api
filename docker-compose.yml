@@ -67,6 +67,7 @@ services:
     build: ./consumer
     restart: unless-stopped
     environment:
+      CONSUMER_DELAY_SECONDS: ${CONSUMER_DELAY_SECONDS:-5}
       RABBITMQ_USER: ${RABBITMQ_USER:-estudante}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-estudante123}
     depends_on:
